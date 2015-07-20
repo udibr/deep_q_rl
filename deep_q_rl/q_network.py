@@ -17,7 +17,7 @@ import lasagne
 import numpy as np
 import theano
 import theano.tensor as T
-from lasagne.layers import cuda_convnet
+from updates import deepmind_rmsprop
 
 
 class DeepQLearner:
@@ -26,21 +26,19 @@ class DeepQLearner:
     """
 
     def __init__(self, input_width, input_height, num_actions, num_frames,
-                 discount, learning_rate, rho, momentum, freeze_interval,
-                 batch_size, network_type, update_rule='rmsprop',
-                 input_scale=255.0):
-        """
-        Allowed network types: "nature_cuda", "nips_cuda", "linear".
-        """
+                 discount, learning_rate, rho, rms_epsilon, momentum,
+                 freeze_interval, batch_size, network_type,
+                 update_rule, batch_accumulator, input_scale=255.0):
 
         self.input_width = input_width
         self.input_height = input_height
         self.num_actions = num_actions
         self.num_frames = num_frames
         self.batch_size = batch_size
-        self.gamma = discount
+        self.discount = discount
         self.rho = rho
         self.lr = learning_rate
+        self.rms_epsilon = rms_epsilon
         self.momentum = momentum
         self.freeze_interval = freeze_interval
 
@@ -58,7 +56,7 @@ class DeepQLearner:
         next_states = T.tensor4('next_states')
         rewards = T.col('rewards')
         actions = T.icol('actions')
-        #terminals = T.icol('terminals')
+        terminals = T.icol('terminals')
 
         self.states_shared = theano.shared(
             np.zeros((batch_size, num_frames, input_height, input_width),
@@ -76,9 +74,9 @@ class DeepQLearner:
             np.zeros((batch_size, 1), dtype='int32'),
             broadcastable=(False, True))
 
-        # self.terminals_shared = theano.shared(
-        #     np.zeros((batch_size, 1), dtype='int32'),
-        #     broadcastable=(False,True))
+        self.terminals_shared = theano.shared(
+            np.zeros((batch_size, 1), dtype='int32'),
+            broadcastable=(False, True))
 
         q_vals = lasagne.layers.get_output(self.l_out, states / input_scale)
         if self.freeze_interval > 0:
@@ -89,11 +87,18 @@ class DeepQLearner:
                                                     next_states / input_scale)
             next_q_vals = theano.gradient.disconnected_grad(next_q_vals)
 
-        target = rewards + self.gamma * T.max(next_q_vals, axis=1,
-                                              keepdims=True)
+        target = (rewards +
+                  (T.ones_like(terminals) - terminals) *
+                  self.discount * T.max(next_q_vals, axis=1, keepdims=True))
         diff = target - q_vals[T.arange(batch_size),
                                actions.reshape((-1,))].reshape((-1, 1))
-        loss = T.mean(diff ** 2)
+
+        if batch_accumulator == 'sum':
+            loss = T.sum(diff ** 2)
+        elif batch_accumulator == 'mean':
+            loss = T.mean(diff ** 2)
+        else:
+            raise ValueError("Bad accumulator: {}".format(batch_accumulator))
 
         params = lasagne.layers.helper.get_all_params(self.l_out)
         givens = {
@@ -101,20 +106,22 @@ class DeepQLearner:
             next_states: self.next_states_shared,
             rewards: self.rewards_shared,
             actions: self.actions_shared,
-            #terminals: self.terminals_shared
+            terminals: self.terminals_shared
         }
-
-        if update_rule == 'rmsprop':
+        if update_rule == 'deepmind_rmsprop':
+            updates = deepmind_rmsprop(loss, params, self.lr, self.rho,
+                                       self.rms_epsilon)
+        elif update_rule == 'rmsprop':
             updates = lasagne.updates.rmsprop(loss, params, self.lr, self.rho,
-                                              .01)
+                                              self.rms_epsilon)
         elif update_rule == 'sgd':
             updates = lasagne.updates.sgd(loss, params, self.lr)
         else:
             raise ValueError("Unrecognized update: {}".format(update_rule))
 
         if self.momentum > 0:
-            updates = lasagne.updates.apply_nesterov_momentum(updates, None,
-                                                              self.momentum)
+            updates = lasagne.updates.apply_momentum(updates, None,
+                                                     self.momentum)
 
         self._train = theano.function([], [loss, q_vals], updates=updates,
                                       givens=givens)
@@ -165,7 +172,7 @@ class DeepQLearner:
         self.next_states_shared.set_value(next_states)
         self.actions_shared.set_value(actions)
         self.rewards_shared.set_value(rewards)
-        #self.terminals_shared.set_value(np.logical_not(terminals))
+        self.terminals_shared.set_value(terminals)
         if (self.freeze_interval > 0 and
             self.update_counter % self.freeze_interval == 0):
             self.reset_q_hat()
@@ -195,6 +202,7 @@ class DeepQLearner:
         """
         Build a large network consistent with the DeepMind Nature paper.
         """
+        from lasagne.layers import cuda_convnet
 
         l_in = lasagne.layers.InputLayer(
             shape=(batch_size, num_frames, input_width, input_height)
@@ -206,8 +214,8 @@ class DeepQLearner:
             filter_size=(8, 8),
             stride=(4, 4),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=None, # Defaults to Glorot
-            b=lasagne.init.Uniform(.1),
+            W=lasagne.init.HeUniform(), # Defaults to Glorot
+            b=lasagne.init.Constant(.1),
             dimshuffle=True
         )
 
@@ -217,8 +225,8 @@ class DeepQLearner:
             filter_size=(4, 4),
             stride=(2, 2),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=None,
-            b=lasagne.init.Uniform(.1),
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1),
             dimshuffle=True
         )
 
@@ -228,8 +236,8 @@ class DeepQLearner:
             filter_size=(3, 3),
             stride=(1, 1),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=None,
-            b=lasagne.init.Uniform(.1),
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1),
             dimshuffle=True
         )
 
@@ -237,16 +245,16 @@ class DeepQLearner:
             l_conv3,
             num_units=512,
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         l_out = lasagne.layers.DenseLayer(
             l_hidden1,
             num_units=output_dim,
             nonlinearity=None,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         return l_out
@@ -269,8 +277,8 @@ class DeepQLearner:
             filter_size=(8, 8),
             stride=(4, 4),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         l_conv2 = dnn.Conv2DDNNLayer(
@@ -279,8 +287,8 @@ class DeepQLearner:
             filter_size=(4, 4),
             stride=(2, 2),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         l_conv3 = dnn.Conv2DDNNLayer(
@@ -289,24 +297,24 @@ class DeepQLearner:
             filter_size=(3, 3),
             stride=(1, 1),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         l_hidden1 = lasagne.layers.DenseLayer(
             l_conv3,
             num_units=512,
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         l_out = lasagne.layers.DenseLayer(
             l_hidden1,
             num_units=output_dim,
             nonlinearity=None,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            W=lasagne.init.HeUniform(),
+            b=lasagne.init.Constant(.1)
         )
 
         return l_out
@@ -318,6 +326,7 @@ class DeepQLearner:
         """
         Build a network consistent with the 2013 NIPS paper.
         """
+        from lasagne.layers import cuda_convnet
         l_in = lasagne.layers.InputLayer(
             shape=(batch_size, num_frames, input_width, input_height)
         )
@@ -328,8 +337,9 @@ class DeepQLearner:
             filter_size=(8, 8),
             stride=(4, 4),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=None,
-            b=lasagne.init.Uniform(.1),
+            #W=lasagne.init.HeUniform(c01b=True),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1),
             dimshuffle=True
         )
 
@@ -339,8 +349,9 @@ class DeepQLearner:
             filter_size=(4, 4),
             stride=(2, 2),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=None,
-            b=lasagne.init.Uniform(.1),
+            #W=lasagne.init.HeUniform(c01b=True),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1),
             dimshuffle=True
         )
 
@@ -348,16 +359,18 @@ class DeepQLearner:
             l_conv2,
             num_units=256,
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            #W=lasagne.init.HeUniform(),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1)
         )
 
         l_out = lasagne.layers.DenseLayer(
             l_hidden1,
             num_units=output_dim,
             nonlinearity=None,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            #W=lasagne.init.HeUniform(),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1)
         )
 
         return l_out
@@ -382,8 +395,9 @@ class DeepQLearner:
             filter_size=(8, 8),
             stride=(4, 4),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            #W=lasagne.init.HeUniform(),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1)
         )
 
         l_conv2 = dnn.Conv2DDNNLayer(
@@ -392,24 +406,27 @@ class DeepQLearner:
             filter_size=(4, 4),
             stride=(2, 2),
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            #W=lasagne.init.HeUniform(),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1)
         )
 
         l_hidden1 = lasagne.layers.DenseLayer(
             l_conv2,
             num_units=256,
             nonlinearity=lasagne.nonlinearities.rectify,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            #W=lasagne.init.HeUniform(),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1)
         )
 
         l_out = lasagne.layers.DenseLayer(
             l_hidden1,
             num_units=output_dim,
             nonlinearity=None,
-            W=lasagne.init.GlorotUniform(),
-            b=lasagne.init.Uniform(.1)
+            #W=lasagne.init.HeUniform(),
+            W=lasagne.init.Normal(.01),
+            b=lasagne.init.Constant(.1)
         )
 
         return l_out

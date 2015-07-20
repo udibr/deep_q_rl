@@ -24,8 +24,6 @@ Here is a video showing a trained network playing breakout (using an earlier ver
 * [Lasagne](http://lasagne.readthedocs.org/en/latest/) ([https://github.com/Lasagne/Lasagne](https://github.com/Lasagne/Lasagne)
 * [Pylearn2](http://deeplearning.net/software/pylearn2/) ([https://github.com/lisa-lab/pylearn2](https://github.com/lisa-lab/pylearn2))
 * [Arcade Learning Environment](http://www.arcadelearningenvironment.org/) ([https://github.com/mgbellemare/Arcade-Learning-Environment](https://github.com/mgbellemare/Arcade-Learning-Environment))
-* [RL-Glue](http://glue.rl-community.org/wiki/Main_Page)
-* [RL-Glue Python Codec](http://glue.rl-community.org/wiki/Python_Codec)
 
 The script `dep_script.sh` can be used to install all dependencies under Ubuntu.
 
@@ -41,8 +39,8 @@ Use the scripts `run_nips.py` or `run_nature.py` to start all the necessary proc
 The `run_nips.py` script uses parameters consistent with the original
 NIPS workshop paper.  This code should take 2-4 days to complete.  The
 `run_nature.py` script uses parameters consistent with the Nature
-paper.  The final policies should be better, but it will take a few
-weeks to finish training.
+paper.  The final policies should be better, but it will take 6-10
+days to finish training.
 
 Either script will store output files in a folder prefixed with the
 name of the ROM.  Pickled version of the network objects are stored
@@ -55,6 +53,15 @@ After training completes, you can watch the network play using the
 `ale_run_watch.py` script: 
 
 `$ python ale_run_watch.py breakout_05-28-17-09_0p00025_0p99/network_file_99.pkl`
+
+# Performance Tuning
+
+## Theano Configuration
+
+Setting `allow_gc=False` in `THEANO_FLAGS` or in the `.theanorc` file
+significantly improves performance at the expense of a slight increase
+in memory usage on the GPU.
+
 
 # Getting Help
 
@@ -70,15 +77,15 @@ general and this package in particular.
   only permits the code to be used for "evaluating and reviewing" the
   claims made in the paper.
 
-* https://github.com/kristjankorjus/Replicating-DeepMind
-
-  This is a work in progress.  Their project is described here: 
-  http://robohub.org/artificial-general-intelligence-that-plays-atari-video-games-how-did-deepmind-do-it/
-
 * https://github.com/muupan/dqn-in-the-caffe
 
   Working Caffe-based implementation.  (I haven't tried it, but there
   is a video of the agent playing Pong successfully.)
+
+* https://github.com/kristjankorjus/Replicating-DeepMind
+
+  Defunct?  As far as I know, this package was never fully functional.  The project is described here: 
+  http://robohub.org/artificial-general-intelligence-that-plays-atari-video-games-how-did-deepmind-do-it/
 
 * https://github.com/brian473/neural_rl
 
