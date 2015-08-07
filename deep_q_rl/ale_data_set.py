@@ -126,7 +126,7 @@ class DataSet(object):
                 actions[batch_count, 0] = self.actions[end_index]
                 rewards[batch_count, 0] = self.rewards[end_index]
                 terminals[batch_count, 0] = self.terminal[end_index]
-                next_states[batch_count, ...] = self._make_phi(index+1)
+                next_states[batch_count, ...] = self._make_phi(index + 1)
                 batch_count += 1
             index += 1
 
@@ -152,7 +152,7 @@ class DataSet(object):
                 actions[count, 0] = self.actions[end_index]
                 rewards[count, 0] = self.rewards[end_index]
                 terminals[count, 0] = self.terminal[end_index]
-                next_states[count, ...] = self._make_phi(index+1)
+                next_states[count, ...] = self._make_phi(index + 1)
                 count += 1
 
         return states, actions, rewards, next_states, terminals

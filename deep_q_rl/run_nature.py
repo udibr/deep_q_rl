@@ -25,6 +25,7 @@ class Defaults:
     BASE_ROM_PATH = "../roms/"
     ROM = 'breakout.bin'
     FRAME_SKIP = 4
+    REPEAT_ACTION_PROBABILITY = 0
 
     # ----------------------
     # Agent/Network parameters:
@@ -41,6 +42,7 @@ class Defaults:
                  # estimating the standard deviation. This package uses
                  # rho/RMS_DECAY to track both the history of the gradient
                  # and the squared gradient.
+    CLIP_DELTA = 1.0
     EPSILON_START = 1.0
     EPSILON_MIN = .1
     EPSILON_DECAY = 1000000
@@ -55,6 +57,7 @@ class Defaults:
     RESIZED_WIDTH = 84
     RESIZED_HEIGHT = 84
     DEATH_ENDS_EPISODE = 'true'
+    MAX_START_NULLOPS = 30
 
 if __name__ == "__main__":
     launcher.launch(sys.argv[1:], Defaults, __doc__)

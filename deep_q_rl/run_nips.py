@@ -18,14 +18,15 @@ class Defaults:
     STEPS_PER_EPOCH = 50000
     EPOCHS = 100
     STEPS_PER_TEST = 10000
-    
+
     # ----------------------
     # ALE Parameters
     # ----------------------
     BASE_ROM_PATH = "../roms/"
     ROM = 'breakout.bin'
     FRAME_SKIP = 4
-    
+    REPEAT_ACTION_PROBABILITY = 0
+
     # ----------------------
     # Agent/Network parameters:
     # ----------------------
@@ -36,6 +37,7 @@ class Defaults:
     RMS_DECAY = .99 # (Rho)
     RMS_EPSILON = 1e-6
     MOMENTUM = 0
+    CLIP_DELTA = 0
     EPSILON_START = 1.0
     EPSILON_MIN = .1
     EPSILON_DECAY = 1000000
@@ -50,6 +52,7 @@ class Defaults:
     RESIZED_WIDTH = 84
     RESIZED_HEIGHT = 84
     DEATH_ENDS_EPISODE = 'false'
+    MAX_START_NULLOPS = 0
 
 if __name__ == "__main__":
     launcher.launch(sys.argv[1:], Defaults, __doc__)

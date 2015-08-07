@@ -35,9 +35,6 @@ def process_args(args, defaults, description):
     parser.add_argument('-t', '--test-length', dest="steps_per_test",
                         type=int, default=defaults.STEPS_PER_TEST,
                         help='Number of steps per test (default: %(default)s)')
-    parser.add_argument('--merge', dest="merge_frames", default=False,
-                        action="store_true",
-                        help='Tell ALE to send the averaged frames')
     parser.add_argument('--display-screen', dest="display_screen",
                         action='store_true', default=False,
                         help='Show the game screen.')
@@ -49,6 +46,11 @@ def process_args(args, defaults, description):
                         default=defaults.FRAME_SKIP, type=int,
                         help='Every how many frames to process '
                         '(default: %(default)s)')
+    parser.add_argument('--repeat-action-probability',
+                        dest="repeat_action_probability",
+                        default=defaults.REPEAT_ACTION_PROBABILITY, type=float,
+                        help=('Probability that action choice will be ' +
+                              'ignored (default: %(default)s)'))
 
     parser.add_argument('--update-rule', dest="update_rule",
                         type=str, default=defaults.UPDATE_RULE,
@@ -69,6 +71,10 @@ def process_args(args, defaults, description):
                         '(default: %(default)s)')
     parser.add_argument('--momentum', type=float, default=defaults.MOMENTUM,
                         help=('Momentum term for Nesterov momentum. '+
+                              '(default: %(default)s)'))
+    parser.add_argument('--clip-delta', dest="clip_delta", type=float,
+                        default=defaults.CLIP_DELTA,
+                        help=('Max absolute value for Q-update delta value. ' +
                               '(default: %(default)s)'))
     parser.add_argument('--discount', type=float, default=defaults.DISCOUNT,
                         help='Discount rate')
@@ -118,7 +124,10 @@ def process_args(args, defaults, description):
     parser.add_argument('--death-ends-episode', dest="death_ends_episode",
                         type=str, default=defaults.DEATH_ENDS_EPISODE,
                         help=('true|false (default: %(default)s)'))
-
+    parser.add_argument('--max-start-nullops', dest="max_start_nullops",
+                        type=int, default=defaults.MAX_START_NULLOPS,
+                        help=('Maximum number of null-ops at the start ' +
+                              'of games. (default: %(default)s)'))
 
     parameters = parser.parse_args(args)
     if parameters.experiment_prefix is None:
@@ -131,6 +140,15 @@ def process_args(args, defaults, description):
         parameters.death_ends_episode = False
     else:
         raise ValueError("--death-ends-episode must be true or false")
+
+    if parameters.freeze_interval > 0:
+        # This addresses an inconsistency between the Nature paper and
+        # the Deepmind code.  The paper states that the target network
+        # update frequency is "measured in the number of parameter
+        # updates".  In the code it is actually measured in the number
+        # of action choices.
+        parameters.freeze_interval = (parameters.freeze_interval //
+                                      parameters.update_frequency)
 
     return parameters
 
@@ -159,8 +177,8 @@ def launch(args, defaults, description):
             pygame.init()
             ale.setBool('sound', False) # Sound doesn't work on OSX
     ale.setBool('display_screen', parameters.display_screen)
-    ale.setInt('frame_skip', parameters.frame_skip)
-    ale.setBool('color_averaging', parameters.merge_frames)
+    ale.setFloat('repeat_action_probability',
+                 parameters.repeat_action_probability)
 
     ale.loadROM(full_rom_path)
 
@@ -176,6 +194,7 @@ def launch(args, defaults, description):
                                          parameters.rms_decay,
                                          parameters.rms_epsilon,
                                          parameters.momentum,
+                                         parameters.clip_delta,
                                          parameters.freeze_interval,
                                          parameters.batch_size,
                                          parameters.network_type,
@@ -201,7 +220,9 @@ def launch(args, defaults, description):
                                               parameters.epochs,
                                               parameters.steps_per_epoch,
                                               parameters.steps_per_test,
-                                              parameters.death_ends_episode)
+                                              parameters.frame_skip,
+                                              parameters.death_ends_episode,
+                                              parameters.max_start_nullops)
 
 
     experiment.run()
