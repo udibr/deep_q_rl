@@ -169,7 +169,8 @@ def launch(args, defaults, description):
     full_rom_path = os.path.join(defaults.BASE_ROM_PATH, rom)
 
     ale = ale_python_interface.ALEInterface()
-    ale.setInt('random_seed', 123)
+    # ale.setInt('random_seed', 123)
+    ale.setString('random_seed', "time")
     if parameters.display_screen:
         import sys
         if sys.platform == 'darwin':
