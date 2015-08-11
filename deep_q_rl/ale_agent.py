@@ -85,11 +85,13 @@ class NeuralAgent(object):
         self.last_img = None
         self.last_action = None
 
+        self.interactive_mode = True
+
     def _open_results_file(self):
         logging.info("OPENING " + self.exp_dir + '/results.csv')
         self.results_file = open(self.exp_dir + '/results.csv', 'w', 0)
         self.results_file.write(\
-            'epoch,num_episodes,total_reward,reward_per_epoch,mean_q\n')
+            'epoch,num_episodes,total_reward,reward_per_episode,mean_q\n')
         self.results_file.flush()
 
     def _open_learning_file(self):
@@ -193,6 +195,29 @@ class NeuralAgent(object):
                 action = self._choose_action(self.data_set, self.epsilon,
                                              observation,
                                              np.clip(reward, -1, 1))
+
+
+        if self.interactive_mode:
+            try:
+                import pygame
+                keys=pygame.key.get_pressed()
+                if keys[32]:
+                    print "FIRE"
+                    action = 1
+                elif keys[275]:
+                    print "RIGHT"
+                    action = 2
+                elif keys[276]:
+                    print "LEFT"
+                    action = 3
+                elif keys[274]:
+                    print "DOWN"
+                    action = 4
+                elif any(keys):
+                    action = 0
+            except:
+                self.interactive_mode = False
+                print "No interactive"
 
 
         self.last_action = action
