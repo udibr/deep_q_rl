@@ -23,6 +23,7 @@ ALE can be installed like this:
     git clone https://github.com/mgbellemare/Arcade-Learning-Environment.git
     cd Arcade-Learning-Environment/
     cmake  -DUSE_SDL=ON -DUSE_RLGLUE=OFF -DBUILD_EXAMPLES=ON .
+    make -j2
     pip install .
 
 If you want to display the simulator on screen (e.g. run `ale_run_watch.py`)
