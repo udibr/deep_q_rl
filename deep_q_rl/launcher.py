@@ -121,6 +121,8 @@ def process_args(args, defaults, description):
                         help=('crop|scale (default: %(default)s)'))
     parser.add_argument('--nn-file', dest="nn_file", type=str, default=None,
                         help='Pickle file containing trained net.')
+    parser.add_argument('--dataset-file', dest="dataset_file", type=str, default=None,
+                        help='numpy file file containing preloaded samples.')
     parser.add_argument('--death-ends-episode', dest="death_ends_episode",
                         type=str, default=defaults.DEATH_ENDS_EPISODE,
                         help=('true|false (default: %(default)s)'))
@@ -128,6 +130,25 @@ def process_args(args, defaults, description):
                         type=int, default=defaults.MAX_START_NULLOPS,
                         help=('Maximum number of null-ops at the start ' +
                               'of games. (default: %(default)s)'))
+    parser.add_argument('--reward-weight',
+                        type=float, default=0.,
+                        help=('When training, at what probability to peek a'
+                              'reward sample. '
+                              '(default: %(default)s)'))
+    parser.add_argument('--reward-weight-horizon',
+                        type=int, default=20,
+                        help=('When training, how many steps before a reward'
+                              ' receive a weight. '
+                              '(default: %(default)s)'))
+    parser.add_argument('--reward-weight-decay',
+                        type=float, default=.95,
+                        help=('When training, by how much to decay the '
+                              'weight for every step before a reward.'
+                              ' (default: %(default)s)'))
+    parser.add_argument('--reward-bias',
+                        type=float, default=defaults.getattr('REWARD_BIAS',0.),
+                        help=('How much reward to add for every step'
+                              ' (default: %(default)s)'))
 
     parameters = parser.parse_args(args)
     if parameters.experiment_prefix is None:
@@ -200,7 +221,8 @@ def launch(args, defaults, description):
                                          parameters.batch_size,
                                          parameters.network_type,
                                          parameters.update_rule,
-                                         parameters.batch_accumulator)
+                                         parameters.batch_accumulator,
+                                         reward_bias=parameters.reward_bias)
     else:
         handle = open(parameters.nn_file, 'r')
         network = cPickle.load(handle)
@@ -212,7 +234,12 @@ def launch(args, defaults, description):
                                   parameters.replay_memory_size,
                                   parameters.experiment_prefix,
                                   parameters.replay_start_size,
-                                  parameters.update_frequency)
+                                  parameters.update_frequency,
+                                  parameters.reward_weight,
+                                  parameters.reward_weight_horizon,
+                                  parameters.reward_weight_decay)
+    if parameters.dataset_file is not None:
+        agent.data_set.load(parameters.dataset_file)
 
     experiment = ale_experiment.ALEExperiment(ale, agent,
                                               defaults.RESIZED_WIDTH,

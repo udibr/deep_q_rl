@@ -19,7 +19,9 @@ class DataSet(object):
     """
 
     def __init__(self, width, height, max_steps=1000, phi_length=4,
-                 capacity=None):
+                 capacity=None,
+                 reward_weight=0., reward_weight_horizon=20,
+                 reward_weight_decay=0.95):
         """  Construct a DataSet.
 
         Arguments:
@@ -27,6 +29,13 @@ class DataSet(object):
             max_steps - the length of history to store.
             phi_length - number of images to concatenate into a state.
             capacity - amount of memory to allocate (just for debugging.)
+            reward_weight - In random_batch, at what probability to peek a
+                reward sample (in addition to random sample.)
+            reward_weight_horizon - In random_batch, how many steps before a
+                reward the samples receive the special reward weight.
+            reward_weight_decay - In random_batch, by how much to decay the
+                reward weight for every step going backward from the point of
+                reward.
         """
 
         self.count = 0
@@ -41,6 +50,55 @@ class DataSet(object):
         self.rewards = np.zeros(self.capacity, dtype=floatX)
         self.terminal = np.zeros(self.capacity, dtype='bool')
 
+        self.reward_weight = reward_weight
+        self.reward_weight_horizon = reward_weight_horizon
+        self.reward_weight_decay = reward_weight_decay
+
+    def save(self, path):
+        # saving the enitre data set is huge so only take rewards and their
+        # horizons
+        states = []
+        actions = []
+        rewards = []
+        terminal = []
+        for end_index in np.where(self.rewards)[0]:
+            start_index = end_index
+            end_index += 1
+            while True:
+                if start_index <= 0:
+                    break
+                if start_index <= end_index - self.reward_weight_horizon - self.phi_length:
+                    break
+                if self.rewards[start_index-1]:
+                    break
+                start_index -= 1
+            start_index = max(0, start_index)
+            states.append(self.states[start_index:end_index,:,:])
+            actions.append(self.actions[start_index:end_index])
+            rewards.append(self.rewards[start_index:end_index])
+            terminal.append(self.terminal[start_index:end_index])
+        # compact data set
+        states = np.concatenate(states)
+        actions = np.concatenate(actions)
+        rewards = np.concatenate(rewards)
+        terminal = np.concatenate(terminal)
+        # save rewards and horizons
+        np.savez_compressed(path,
+                            states=states,
+                            actions=actions,
+                            rewards=rewards,
+                            termianl=terminal)
+
+    def load(self, path):
+        d = np.load(path)
+        n = np.where(d['termianl'])[0][-1] + 1
+        n = min(n, self.capacity)
+        print "pre loading", n
+        self.states[:n,:,:] = d['states'][:n,:,:]
+        self.actions[:n] = d['actions'][:n]
+        self.rewards[:n] = d['rewards'][:n]
+        self.terminal[:n] = d['termianl'][:n]
+        self.count = n
 
     def _min_index(self):
         return max(0, self.count - self.max_steps)
@@ -143,10 +201,26 @@ class DataSet(object):
         states, actions, rewards, terminals, next_states = \
             self._empty_batch(batch_size)
 
+        # collect random reward samples and samples that preceded rewards
+        reward_samples = []
+        if self.reward_weight > 0.:
+            for end_index in np.where(self.rewards)[0]:
+                weight = self.reward_weight
+                for i in xrange(self.reward_weight_horizon):
+                    if np.random.random() < weight:
+                        reward_samples.append(end_index-i)
+                    weight *= self.reward_weight_decay
+
         # Grab random samples until we have enough
         while count < batch_size:
-            index = np.random.randint(self._min_index(), self._max_index()+1)
-            end_index = index + self.phi_length - 1
+            if reward_samples:
+                end_index = reward_samples.pop()
+                index = end_index - (self.phi_length - 1)
+                if index < self._min_index() or index > self._max_index():
+                    continue
+            else:
+                index = np.random.randint(self._min_index(), self._max_index()+1)
+                end_index = index + self.phi_length - 1
             if self.single_episode(index, end_index):
                 states[count, ...] = self._make_phi(index)
                 actions[count, 0] = self.actions[end_index]

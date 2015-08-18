@@ -24,7 +24,8 @@ class NeuralAgent(object):
 
     def __init__(self, q_network, epsilon_start, epsilon_min,
                  epsilon_decay, replay_memory_size, exp_pref,
-                 replay_start_size, update_frequency):
+                 replay_start_size, update_frequency,
+                 reward_weight=0., reward_weight_horizon=0, reward_weight_decay=1.):
 
         self.network = q_network
         self.epsilon_start = epsilon_start
@@ -49,13 +50,20 @@ class NeuralAgent(object):
         except OSError:
             os.makedirs(self.exp_dir)
 
+        with open(self.exp_dir + '/argv','w') as fp:
+            fp.write(' '.join(sys.argv))
+
         self.num_actions = self.network.num_actions
 
 
         self.data_set = ale_data_set.DataSet(width=self.image_width,
                                              height=self.image_height,
                                              max_steps=self.replay_memory_size,
-                                             phi_length=self.phi_length)
+                                             phi_length=self.phi_length,
+                                    reward_weight=reward_weight,
+                                    reward_weight_horizon=reward_weight_horizon,
+                                    reward_weight_decay=reward_weight_decay
+                                )
 
         # just needs to be big enough to create phi's
         self.test_data_set = ale_data_set.DataSet(width=self.image_width,
@@ -293,10 +301,12 @@ class NeuralAgent(object):
 
 
     def finish_epoch(self, epoch):
-        net_file = open(self.exp_dir + '/network_file_' + str(epoch) + \
-                        '.pkl', 'w')
-        cPickle.dump(self.network, net_file, -1)
-        net_file.close()
+        with open(self.exp_dir + '/network_file_' + str(epoch) + \
+                        '.pkl', 'w') as net_file:
+            cPickle.dump(self.network, net_file, -1)
+        self.data_set.save(self.exp_dir + '/agent')
+
+
 
     def start_testing(self):
         self.testing = True

@@ -29,7 +29,7 @@ class DeepQLearner:
                  num_frames, discount, learning_rate, rho,
                  rms_epsilon, momentum, clip_delta, freeze_interval,
                  batch_size, network_type, update_rule,
-                 batch_accumulator, input_scale=255.0):
+                 batch_accumulator, input_scale=255.0, reward_bias=0.):
 
         self.input_width = input_width
         self.input_height = input_height
@@ -89,7 +89,7 @@ class DeepQLearner:
                                                     next_states / input_scale)
             next_q_vals = theano.gradient.disconnected_grad(next_q_vals)
 
-        target = (rewards +
+        target = (rewards + reward_bias +
                   (T.ones_like(terminals) - terminals) *
                   self.discount * T.max(next_q_vals, axis=1, keepdims=True))
         diff = target - q_vals[T.arange(batch_size),

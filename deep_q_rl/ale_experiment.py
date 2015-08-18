@@ -71,10 +71,16 @@ class ALEExperiment(object):
         self.terminal_lol = False # Make sure each epoch starts with a reset.
         steps_left = num_steps
         while steps_left > 0:
-            prefix = "testing" if testing else "training"
-            logging.info(prefix + " epoch: " + str(epoch) + " steps_left: " +
-                         str(steps_left))
             _, num_steps = self.run_episode(steps_left, testing)
+            rewards_sum = np.sum(self.agent.data_set.rewards)
+            rewards_per_sample = rewards_sum/(self.agent.data_set.count + 1e-6)
+            prefix = "testing" if testing else "training"
+            logging.info(prefix + " epoch:%d"%epoch +
+                         " steps_left:%d"%steps_left +
+                         " steps_left:%d"%steps_left +
+                         " num_steps:%d"%num_steps +
+                         " rewards_sum:%.0f"%rewards_sum +
+                         " rewards_per_sample:%.3g"%rewards_per_sample)
 
             steps_left -= num_steps
 
@@ -106,6 +112,8 @@ class ALEExperiment(object):
 
         """
         reward = self.ale.act(action)
+        if reward:
+            print "REWARD 1"
         index = self.buffer_count % self.buffer_length
         self.ale.getScreenRGB(self.screen_rgb)
         cv2.cvtColor(self.screen_rgb, cv2.COLOR_RGB2GRAY,
@@ -187,6 +195,9 @@ class ALEExperiment(object):
             return cv2.resize(image,
                               (self.resized_width, self.resized_height),
                               interpolation=cv2.INTER_LINEAR)
+        elif self.resize_method == 'tetris':
+            # 27:204,22:64
+            return image[27:27+self.resized_height,22:22+self.resized_width]
         else:
             raise ValueError('Unrecognized image resize method.')
 
