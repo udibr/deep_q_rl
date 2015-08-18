@@ -52,7 +52,9 @@ class DataSet(object):
 
         self.reward_weight = reward_weight
         self.reward_weight_horizon = reward_weight_horizon
-        self.reward_weight_decay = reward_weight_decay
+        self.weights = np.zeros(reward_weight_horizon)
+        for i in range(1,reward_weight_horizon):
+            self.weights[i] = reward_weight_decay * self.weights[i-1]
 
     def save(self, path):
         # saving the enitre data set is huge so only take rewards and their
@@ -77,17 +79,18 @@ class DataSet(object):
             actions.append(self.actions[start_index:end_index])
             rewards.append(self.rewards[start_index:end_index])
             terminal.append(self.terminal[start_index:end_index])
-        # compact data set
-        states = np.concatenate(states)
-        actions = np.concatenate(actions)
-        rewards = np.concatenate(rewards)
-        terminal = np.concatenate(terminal)
-        # save rewards and horizons
-        np.savez_compressed(path,
-                            states=states,
-                            actions=actions,
-                            rewards=rewards,
-                            termianl=terminal)
+        if rewards:
+            # compact data set
+            states = np.concatenate(states)
+            actions = np.concatenate(actions)
+            rewards = np.concatenate(rewards)
+            terminal = np.concatenate(terminal)
+            # save rewards and horizons
+            np.savez_compressed(path,
+                                states=states,
+                                actions=actions,
+                                rewards=rewards,
+                                termianl=terminal)
 
     def load(self, path):
         d = np.load(path)
@@ -202,19 +205,27 @@ class DataSet(object):
             self._empty_batch(batch_size)
 
         # collect random reward samples and samples that preceded rewards
-        reward_samples = []
+        reward_samples = 0
         if self.reward_weight > 0.:
-            for end_index in np.where(self.rewards)[0]:
-                weight = self.reward_weight
-                for i in xrange(self.reward_weight_horizon):
-                    if np.random.random() < weight:
-                        reward_samples.append(end_index-i)
-                    weight *= self.reward_weight_decay
+            rewards_samples_loc = np.where(self.rewards)[0]
+            n1 = len(rewards_samples_loc)
+            if n1:
+                samples_idx = np.empty(n1*self.reward_weight_horizon)
+                for end_index in rewards_samples_loc:
+                    w = np.random.random(self.reward_weight_horizon) < self.weights
+                    w = np.where(w)[0]
+                    if w:
+                        w = end_index - w
+                        w = w[w >= 0]
+                        n = reward_samples + len(w)
+                        samples_idx[reward_samples:n] = w
+                        reward_samples = n
 
         # Grab random samples until we have enough
         while count < batch_size:
             if reward_samples:
-                end_index = reward_samples.pop()
+                reward_samples -= 1
+                end_index = samples_idx[reward_samples]
                 index = end_index - (self.phi_length - 1)
                 if index < self._min_index() or index > self._max_index():
                     continue

@@ -50,8 +50,15 @@ class NeuralAgent(object):
         except OSError:
             os.makedirs(self.exp_dir)
 
+        import subprocess
+        subp = subprocess.Popen(['git', 'rev-parse', 'HEAD'],
+                                stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE)
+        out, err = subp.communicate()
+        commit = out.strip()
         with open(self.exp_dir + '/argv','w') as fp:
-            fp.write(' '.join(sys.argv))
+            fp.write(' '.join(sys.argv) + '\n')
+            fp.write(commit + '\n')
 
         self.num_actions = self.network.num_actions
 

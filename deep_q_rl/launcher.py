@@ -146,7 +146,7 @@ def process_args(args, defaults, description):
                               'weight for every step before a reward.'
                               ' (default: %(default)s)'))
     parser.add_argument('--reward-bias',
-                        type=float, default=defaults.getattr('REWARD_BIAS',0.),
+                        type=float, default=getattr(defaults,'REWARD_BIAS',0.),
                         help=('How much reward to add for every step'
                               ' (default: %(default)s)'))
 

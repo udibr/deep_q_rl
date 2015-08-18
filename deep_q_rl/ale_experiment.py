@@ -77,7 +77,6 @@ class ALEExperiment(object):
             prefix = "testing" if testing else "training"
             logging.info(prefix + " epoch:%d"%epoch +
                          " steps_left:%d"%steps_left +
-                         " steps_left:%d"%steps_left +
                          " num_steps:%d"%num_steps +
                          " rewards_sum:%.0f"%rewards_sum +
                          " rewards_per_sample:%.3g"%rewards_per_sample)
